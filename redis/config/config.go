@@ -15,8 +15,8 @@ type Config struct {
 	// COM configuration
 	COM COMConfig `json:"com"`
 	// Common configuration
-	LogLevel        string   `json:"log_level"`
-	LogToFile       bool     `json:"log_to_file"`
+	LogLevel        string   `json:"logLevel"`
+	LogToFile       bool     `json:"logToFile"`
 	ShutdownTimeout Duration `json:"shutdownTimeout"`
 }
 

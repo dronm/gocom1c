@@ -47,7 +47,6 @@ func (c *COMConnection) comWorker(cfg *Config, ready chan<- error, logger Logger
 		ready <- fmt.Errorf("1C Connect failed: %w", err)
 		return
 	}
-	// DO NOT defer c.v8.Clear() here - we need it for the lifetime of the connection
 
 	// Get справочники
 	spr, err := oleutil.GetProperty(c.v8.ToIDispatch(), "Справочники")
@@ -56,7 +55,6 @@ func (c *COMConnection) comWorker(cfg *Config, ready chan<- error, logger Logger
 		ready <- fmt.Errorf("object property 'Справочники' not found: %w", err)
 		return
 	}
-	// DON'T defer spr.Clear() yet
 
 	// Get ДополнительныеОтчетыИОбработки
 	sprOtch, err := oleutil.GetProperty(spr.ToIDispatch(), "ДополнительныеОтчетыИОбработки")
@@ -66,7 +64,6 @@ func (c *COMConnection) comWorker(cfg *Config, ready chan<- error, logger Logger
 		ready <- fmt.Errorf("object property 'ДополнительныеОтчетыИОбработки' not found: %w", err)
 		return
 	}
-	// DON'T defer sprOtch.Clear() yet
 
 	// Find обработка by name
 	extForm, err := oleutil.CallMethod(sprOtch.ToIDispatch(), "НайтиПоНаименованию", cfg.CommandExec, true)
@@ -76,7 +73,6 @@ func (c *COMConnection) comWorker(cfg *Config, ready chan<- error, logger Logger
 		ready <- fmt.Errorf("method 'НайтиПоНаименованию()' not found: %w", err)
 		return
 	}
-	// DON'T defer extForm.Clear() yet - we need it for ХранилищеОбработки
 
 	// Check if empty
 	isEmpty, err := oleutil.CallMethod(extForm.ToIDispatch(), "Пустая")
@@ -86,7 +82,6 @@ func (c *COMConnection) comWorker(cfg *Config, ready chan<- error, logger Logger
 		ready <- fmt.Errorf("method 'Пустая()' not found: %w", err)
 		return
 	}
-	// DON'T defer isEmpty.Clear() yet
 
 	isEmptyRes, ok := isEmpty.Value().(bool)
 	isEmpty.Clear() // Clear isEmpty immediately after getting value
@@ -111,7 +106,6 @@ func (c *COMConnection) comWorker(cfg *Config, ready chan<- error, logger Logger
 		ready <- fmt.Errorf("method 'ПолучитьИмяВременногоФайла()' not found: %w", err)
 		return
 	}
-	// DON'T defer tempFileName.Clear() yet - we need it for Создать()
 
 	// Get ХранилищеОбработки from extForm
 	obrStore, err := oleutil.GetProperty(extForm.ToIDispatch(), "ХранилищеОбработки")
@@ -122,7 +116,6 @@ func (c *COMConnection) comWorker(cfg *Config, ready chan<- error, logger Logger
 		ready <- fmt.Errorf("object property 'ХранилищеОбработки' not found: %w", err)
 		return
 	}
-	// DON'T defer obrStore.Clear() yet
 
 	// Get data from storage
 	data, err := oleutil.CallMethod(obrStore.ToIDispatch(), "Получить")
@@ -134,7 +127,6 @@ func (c *COMConnection) comWorker(cfg *Config, ready chan<- error, logger Logger
 		ready <- fmt.Errorf("method 'Получить()' not found: %w", err)
 		return
 	}
-	// DON'T defer data.Clear() yet
 
 	// Write to temp file
 	_, err = oleutil.CallMethod(data.ToIDispatch(), "Записать", tempFileName.Value())

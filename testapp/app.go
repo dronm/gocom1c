@@ -24,6 +24,10 @@ func (l *SimpleLogger) Debugf(format string, args ...any) {
 	log.Printf("DEBUG: "+format, args...)
 }
 
+func (l *SimpleLogger) Warnf(format string, args ...any) {
+	log.Printf("WARN: "+format, args...)
+}
+
 func main() {
 	cfg := com_pool.Config{
 		ConnectionString: `Srvr="vds484";Ref="21315_576_60751";Usr="Михалевич АА";Pwd="jU5gujas"`,
