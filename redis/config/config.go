@@ -35,7 +35,7 @@ type RedisConfig struct {
 	// Timeouts
 	ReadTimeout  Duration `json:"readTimeout"`
 	WriteTimeout Duration `json:"writeTimeout"`
-	PLPopTimeout Duration `json:"blpopTimeout"`
+	BLPopTimeout Duration `json:"blpopTimeout"`
 
 	// Pool settings
 	MaxIdle   int `json:"maxIdle"`
@@ -116,8 +116,8 @@ func (c *Config) ReadConf(filename string) error {
 	if c.Redis.WriteTimeout.Duration == 0 {
 		c.Redis.WriteTimeout.Duration = defWriteTimeout
 	}
-	if c.Redis.PLPopTimeout.Duration == 0 {
-		c.Redis.PLPopTimeout.Duration = defPLPopTimeout
+	if c.Redis.BLPopTimeout.Duration == 0 {
+		c.Redis.BLPopTimeout.Duration = defBLPopTimeout
 	}
 
 	return nil
@@ -134,5 +134,5 @@ const (
 	defResponseQueue = "com1c:responses"
 	defReadTimeout   = 5 * time.Second
 	defWriteTimeout  = 5 * time.Second
-	defPLPopTimeout  = 1 * time.Second
+	defBLPopTimeout  = 1 * time.Second
 )

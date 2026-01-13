@@ -139,7 +139,7 @@ func (s *RedisServer) processCommands() {
 			// Continue to BLPOP
 		}
 
-		result, err := s.redis.BLPop(s.ctx, s.cfg.Redis.PLPopTimeout.Duration, queueName).Result()
+		result, err := s.redis.BLPop(s.ctx, s.cfg.Redis.BLPopTimeout.Duration, queueName).Result()
 		if err != nil {
 			if err == context.Canceled || err == redis.Nil {
 				// Context cancelled or timeout, continue to check context
