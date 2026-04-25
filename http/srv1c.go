@@ -67,9 +67,9 @@ func (app *ServiceApp) Start() error {
 		app.cfg = cfg
 
 		// Initialize logger
-		var logFileName string
-		if cfg.LogToFile {
-			logFileName = config.DefLogFileName
+		logFileName, err := resolveLogFileName(cfg.LogToFile)
+		if err != nil {
+			return fmt.Errorf("resolveLogFileName():%w", err)
 		}
 		if err := logger.Initialize(logger.LoggerLogLevel(cfg.LogLevel), logFileName); err != nil {
 			return fmt.Errorf("failed to initialize logger: %v", err)
@@ -99,4 +99,24 @@ func getExecutableDir() (string, error) {
 		return "", err
 	}
 	return filepath.Dir(exePath), nil
+}
+
+// resolveLogFileName is a helper to resolve log filename.
+func resolveLogFileName(logToFile bool) (string, error) {
+	if !logToFile {
+		return "", nil
+	}
+
+	programData := os.Getenv("ProgramData")
+	if programData == "" {
+		return "", fmt.Errorf("ProgramData env variable is empty")
+	}
+
+	logDir := filepath.Join(programData, "GoCom1c", "logs")
+
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create log dir %q: %w", logDir, err)
+	}
+
+	return filepath.Join(logDir, config.DefLogFileName), nil
 }
