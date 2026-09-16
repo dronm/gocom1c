@@ -60,6 +60,66 @@ go get github.com/dronm/gocom1c
 
 ---
 
+## Установка и управление Windows-службами
+
+Примеры HTTP- и Redis-сервисов поддерживают следующие параметры запуска:
+
+| Параметр | Описание |
+| -------- | -------- |
+| `--service install` | Установить исполняемый файл как Windows-службу с автоматическим типом запуска. |
+| `--service uninstall` | Удалить Windows-службу. Перед удалением службу рекомендуется остановить. |
+| `--service run` | Запустить приложение в режиме Windows-службы. Этот параметр сохраняется при установке и передаётся диспетчером служб автоматически; вручную использовать его обычно не требуется. |
+| `--service-name <имя>` | Задать системное имя службы. По умолчанию используется `GoCOM1CService` для HTTP-сервиса и `GoCOM1CRedisService` для Redis-сервиса. |
+
+Если параметр `--service` не указан, приложение запускается в консольном режиме.
+
+Перед установкой:
+
+- соберите нужное приложение командой `make prod` в каталоге `http` или `redis`;
+- поместите `config.json` рядом с `srv1c.exe`;
+- запустите PowerShell или командную строку от имени администратора;
+- не перемещайте и не переименовывайте `srv1c.exe` после установки: служба сохраняет полный путь к текущему исполняемому файлу.
+
+Пример установки и запуска HTTP-сервиса:
+
+```powershell
+cd http
+make prod
+.\srv1c.exe --service install
+sc.exe start GoCOM1CService
+```
+
+Остановка и удаление HTTP-сервиса:
+
+```powershell
+sc.exe stop GoCOM1CService
+.\srv1c.exe --service uninstall
+```
+
+Для Redis-сервиса команды аналогичны, но имя службы по умолчанию — `GoCOM1CRedisService`:
+
+```powershell
+cd redis
+make prod
+.\srv1c.exe --service install
+sc.exe start GoCOM1CRedisService
+```
+
+При использовании собственного имени передавайте его при установке и удалении:
+
+```powershell
+.\srv1c.exe --service install --service-name MyGoCOM1CService
+sc.exe start MyGoCOM1CService
+sc.exe stop MyGoCOM1CService
+.\srv1c.exe --service uninstall --service-name MyGoCOM1CService
+```
+
+Команда установки только регистрирует службу. Несмотря на автоматический тип запуска, сразу после установки её необходимо запустить вручную командой `sc.exe start` или через оснастку «Службы». В дальнейшем Windows будет запускать её автоматически.
+
+Значений `start` и `stop` у параметра `--service` нет: для запуска и остановки используйте `sc.exe`, PowerShell-команды `Start-Service` и `Stop-Service` или оснастку `services.msc`.
+
+---
+
 ## Использование
 Ниже приведён упрощённый пример использования библиотеки: создание пула COM-соединений и параллельное выполнение команд в 1С.
 ```golang
