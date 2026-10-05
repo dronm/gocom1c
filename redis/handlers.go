@@ -230,6 +230,9 @@ func (s *RedisServer) getPoolStatus() map[string]any {
 func (s *RedisServer) startPool() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if !s.isRunning || s.stopping {
+		return fmt.Errorf("server is shutting down")
+	}
 
 	if s.pool != nil {
 		return fmt.Errorf("pool already started")
@@ -337,8 +340,8 @@ func (s *RedisServer) sendResponse(response *RedisResponse) {
 	}
 
 	queueLen, _ := s.redis.LLen(s.ctx, channel).Result()
-		logger.Logger.Infof("Response sent successfully to %s. Queue length: %d", 
-			channel, queueLen)
+	logger.Logger.Infof("Response sent successfully to %s. Queue length: %d",
+		channel, queueLen)
 }
 
 // generateRequestID generates a unique request ID

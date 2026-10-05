@@ -1,0 +1,29 @@
+{
+	"logLevel": "info",
+	"logToFile": true,
+	"logRotationPeriod": "daily",
+	"shutdownTimeout": "10s",
+	"redis": {
+		"host": "localhost",
+		"port": 6379,
+		"username": "",
+		"password": "",
+		"db": 0,
+		"commandQueue": "com1c:commands",
+		"responseQueue": "com1c:responses",
+		"readTimeout": "5s",
+		"writeTimeout": "5s",
+		"blPopTimeout": "1s"
+	},
+	"com": {
+		"connectionString": "",
+		"commandExec": "WebAPI",
+		"maxPoolSize": 1,
+		"minPoolSize": 1,
+		"idleTimeout": "120s",
+		"comObjectId": "V83.COMConnector",
+		"waitConnTimeout": "10s",
+		"cleanupIdleConn": "60s",
+		"connCloseTimeout": "30s"
+	}
+}
