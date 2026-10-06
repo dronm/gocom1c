@@ -1,0 +1,22 @@
+{
+	"command": "new_order",
+	"params": {
+		"warehouse_ref": "dc878a44-0576-11f0-a2c1-00155d327e58",
+		"firm_ref": "86d45fa6-42c2-11ec-bbb4-00155d327a0c",
+		"client_ref": "f2e229a7-c37d-11ef-a2b1-00155d327e58",
+		"contract_ref": "f2e229ab-c37d-11ef-a2b1-00155d327e58",
+		"agreement_ref": "46ab0e50-22d2-11ed-bbb7-00155d327a0b",
+		"ecommerce_id": "777",
+		"payed": false,
+		"products": [
+			{
+				"product_ref": "d29b7144-63d6-11ed-a27e-00155d32870a",
+				"quant": 80,
+				"price": 120,
+				"total": 7680,
+				"measure_unit_k": 1,
+				"char_ref": "e70b1d7d-63d6-11ed-a27e-00155d32870a"
+			}
+		]
+	}
+}

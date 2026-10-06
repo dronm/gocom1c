@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"os"
 	"time"
-
-	"github.com/dronm/gocom1c/internal/logging"
 )
 
 const (
@@ -44,10 +42,9 @@ type Auth struct {
 }
 
 type Config struct {
-	LogLevel          string   `json:"logLevel"`
-	LogToFile         bool     `json:"logToFile"`
-	LogRotationPeriod string   `json:"logRotationPeriod"`
-	ShutdownTimeout   Duration `json:"shutdownTimeout"`
+	LogLevel        string   `json:"logLevel"`
+	LogToFile       bool     `json:"logToFile"`
+	ShutdownTimeout Duration `json:"shutdownTimeout"`
 
 	Auth Auth `json:"auth"`
 
@@ -74,9 +71,6 @@ func (c *Config) ReadConf(fileName string) error {
 	if c.LogLevel == "" {
 		c.LogLevel = defLogLevel
 	}
-	if err := c.readLogRotationPeriod(file); err != nil {
-		return err
-	}
 
 	if c.ShutdownTimeout.Duration == 0 {
 		c.ShutdownTimeout.Duration = defShutdownTimeout
@@ -96,25 +90,6 @@ func (c *Config) ReadConf(fileName string) error {
 		c.IdleTimeout.Duration = defHTTPIdleTimeout
 	}
 
-	return nil
-}
-
-func (c *Config) readLogRotationPeriod(data []byte) error {
-	var fields struct {
-		LogRotationPeriod json.RawMessage `json:"logRotationPeriod"`
-	}
-	if err := json.Unmarshal(data, &fields); err != nil {
-		return err
-	}
-	value := fields.LogRotationPeriod
-	if len(value) == 0 {
-		c.LogRotationPeriod = logging.DefaultRotationPeriod
-	} else if bytes.Equal(bytes.TrimSpace(value), []byte("null")) || len(bytes.TrimSpace([]byte(c.LogRotationPeriod))) == 0 {
-		return fmt.Errorf("logRotationPeriod must be a string: daily or a positive duration")
-	}
-	if _, err := logging.ParsePeriod(c.LogRotationPeriod); err != nil {
-		return fmt.Errorf("logRotationPeriod: %w", err)
-	}
 	return nil
 }
 

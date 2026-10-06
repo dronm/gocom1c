@@ -1,0 +1,6 @@
+{
+	"command": "print_order",
+	"params": {
+		"order_ref": "5cde9a27-db00-11f0-a2ee-00155d07cb0b"
+	}
+}

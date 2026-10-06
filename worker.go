@@ -39,8 +39,7 @@ func (c *COMConnection) comWorker(cfg *Config, ready chan<- error, logger Logger
 	}
 	defer dispatch.Release()
 
-	// ConnectionString contains credentials and must never be included in logs.
-	logger.Debugf("Connecting COM connection %d", c.id)
+	logger.Debugf("trying to connect with: %s", cfg.ConnectionString)
 
 	// Connect to 1C
 	c.v8, err = oleutil.CallMethod(dispatch, "Connect", cfg.ConnectionString)
@@ -197,3 +196,4 @@ func (c *COMConnection) comWorker(cfg *Config, ready chan<- error, logger Logger
 		}
 	}
 }
+
