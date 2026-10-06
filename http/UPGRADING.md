@@ -1,47 +1,47 @@
-# Upgrading the HTTP Windows service
+# Обновление HTTP-службы Windows
 
-Upgrade an existing production service by stopping it, replacing its executable,
-and starting it again. Keep the executable's registered path and filename the
-same. Uninstalling and reinstalling is unnecessary for a normal application
-update and would remove the existing service registration.
+Для обновления установленной службы остановите её, замените исполняемый файл
+и снова запустите службу. Сохраните зарегистрированные путь и имя исполняемого
+файла. При обычном обновлении удалять и заново устанавливать службу не требуется:
+это удалило бы её существующую регистрацию.
 
-Keeping the registration preserves the service account, startup type, recovery
-settings, and command-line arguments.
+Сохранение регистрации позволяет оставить прежние учётную запись службы, тип
+запуска, параметры восстановления и аргументы командной строки.
 
-The examples assume the installed executable is named `srv1c.exe`. If it was
-renamed, substitute its actual filename as well as its installation directory.
+В примерах установленный исполняемый файл называется `srv1c.exe`. Если вы его
+переименовали, используйте фактическое имя файла и каталог установки.
 
-1. **Prepare the HTTP executable.**
+1. **Подготовьте исполняемый файл HTTP-службы.**
 
-	Build from the `http` directory, using the same architecture as the current
-	application and its installed 1C COM connector:
+	Выполните сборку из каталога `http` для той же архитектуры, что у текущего
+	приложения и установленного COM-коннектора 1С:
 
 	```bash
 	make prod
 	```
 
-	`make prod` builds Windows amd64; `make prod32` builds Windows 386. Both
-	produce `srv1c.exe`. The Redis application also produces a file with that
-	name, so use the executable built from `http` for the HTTP service. Stage
-	the new executable separately from the installed executable.
+	`make prod` собирает версию Windows amd64; `make prod32` — Windows 386. Обе
+	команды создают `srv1c.exe`. Приложение Redis также создаёт файл с этим
+	именем, поэтому для HTTP-службы используйте сборку из каталога `http`.
+	Поместите новый исполняемый файл отдельно от установленного.
 
-2. **Check the registered service.**
+2. **Проверьте зарегистрированную службу.**
 
-	Open PowerShell as Administrator:
+	Откройте PowerShell от имени администратора:
 
 	```powershell
 	$serviceName = "GoCOM1CService";
 	sc.exe qc $serviceName;
 	```
 
-	If the service has a custom name, use its actual name. Check
-	`BINARY_PATH_NAME` for the installed executable and its arguments. The
-	application reads `config.json` from the directory containing that executable.
+	Если у службы другое имя, укажите его. Проверьте в `BINARY_PATH_NAME`
+	путь установленного исполняемого файла и его аргументы. Приложение читает
+	`config.json` из каталога, в котором находится исполняемый файл.
 
-3. **Pause requests and stop the service.**
+3. **Приостановите запросы и остановите службу.**
 
-	Pause clients, scheduled jobs, or other callers and allow active COM commands
-	to finish before stopping the service.
+	Приостановите клиентов, задания по расписанию и другие источники запросов.
+	Перед остановкой службы дождитесь завершения выполняемых COM-команд.
 
 	```powershell
 	Stop-Service -Name $serviceName -ErrorAction Stop;
@@ -49,13 +49,14 @@ renamed, substitute its actual filename as well as its installation directory.
 	Get-Service -Name $serviceName;
 	```
 
-	Proceed after the service is `Stopped` and its process has exited. If stopping
-	fails or times out, resolve that before replacing any files. If the executable
-	is still locked, wait for the old process to exit.
+	Продолжайте после перехода службы в состояние `Stopped` и завершения её
+	процесса. Если остановка завершилась ошибкой или превысила время ожидания,
+	сначала устраните эту проблему. Если исполняемый файл ещё заблокирован,
+	дождитесь завершения старого процесса.
 
-4. **Back up the installed executable and configuration.**
+4. **Сохраните резервную копию исполняемого файла и конфигурации.**
 
-	For example, after substituting the actual installation directory:
+	Например, заменив путь на фактический каталог установки:
 
 	```powershell
 	$appDir = "C:\GoCOM1C";
@@ -65,33 +66,54 @@ renamed, substitute its actual filename as well as its installation directory.
 	Copy-Item -LiteralPath (Join-Path $appDir "config.json") -Destination $backupDir -ErrorAction Stop;
 	```
 
-	Keep this backup until the upgrade has been verified.
+	Храните резервную копию до завершения проверки обновления.
 
-5. **Replace only the application executable.**
+5. **Замените исполняемый файл приложения.**
 
-	Copy the new HTTP build over the existing `srv1c.exe`, preserving its path
-	and filename. For example:
+	Скопируйте новую HTTP-сборку поверх установленного `srv1c.exe`, сохранив его
+	путь и имя. Например:
 
 	```powershell
 	$newExe = "C:\Temp\srv1c.exe";
 	Copy-Item -LiteralPath $newExe -Destination (Join-Path $appDir "srv1c.exe") -Force -ErrorAction Stop;
 	```
 
-	Keep the production `config.json`, including its COM connection string,
-	authentication settings, and HTTP address. Do not replace it with the sample
-	configuration from the source archive.
+	Сохраните рабочий `config.json`, включая строку подключения к 1С, параметры
+	аутентификации и адрес HTTP-сервера. Не заменяйте его примером конфигурации
+	из архива исходного кода.
 
-	For the logging update, `logRotationPeriod` is optional. Omitting it selects
-	`"daily"`, which rotates by the server's local calendar date. Fixed durations
-	such as `"6h"` or `"24h"` are also supported. File logging requires
-	`"logToFile": true`; existing settings remain effective.
+	Параметр `logRotationPeriod` необязателен. Если его не указать, используется
+	`"daily"`: файл меняется по локальной календарной дате сервера при следующей
+	записи в лог. Можно задавать фиксированные положительные интервалы,
+	например `"1h"`, `"6h"` или `"24h"`. Фиксированные 24 часа не означают
+	смену файла в локальную полночь. Запись в файлы требует `"logToFile": true`.
+	В поставляемом `http/config.json` установлено `"logToFile": false`.
 
-	When enabled, HTTP logs are written under `%ProgramData%\GoCom1c\logs`,
-	for example `log-2026-10-05.txt`. The service account needs permission to create
-	and write files there. Existing logs are preserved and are not automatically
-	deleted.
+	При включённой записи в файлы HTTP-логи сохраняются в
+	`%ProgramData%\GoCom1c\logs`, например `log-2026-10-06.txt`. Учётной записи
+	службы нужны права на создание, запись и удаление файлов в этом каталоге.
 
-6. **Start and verify the upgraded service.**
+	Новый параметр `logRetentionDays` задаёт срок хранения логов: по умолчанию
+	30 дней; `0` отключает автоматическое удаление. Допустимы только целые
+	числа от `0` до `106751`; верхний предел предотвращает переполнение
+	временного интервала. Если нужно сохранить все старые файлы при обновлении,
+	добавьте `"logRetentionDays": 0` в рабочую конфигурацию до запуска новой
+	версии. Остальные настройки конфигурации сохраните.
+
+	Очистка выполняется при открытии файлового логгера и затем при записи
+	сообщений, не чаще одного раза в час. Она может удалить старые файлы уже
+	при первом запуске обновлённой службы. Возраст считается по времени
+	последнего изменения файла; один день равен 24 часам. В простое и при
+	остановленной службе фоновой очистки нет.
+
+	Удаляются только обычные файлы этого логгера с корректными именами
+	ротации и временными метками, включая файлы предыдущих периодов и форматов
+	ротации. Текущий открытый файл, старые `log.txt` и `redis1c.log`,
+	посторонние файлы, каталоги и символические ссылки сохраняются.
+	Ошибки очистки выводятся в stderr и не прерывают логирование.
+	Подробнее: [Ротация и срок хранения логов HTTP-службы](README.md#ротация-и-срок-хранения-логов-http-службы).
+
+6. **Запустите и проверьте обновлённую службу.**
 
 	```powershell
 	Start-Service -Name $serviceName -ErrorAction Stop;
@@ -99,31 +121,34 @@ renamed, substitute its actual filename as well as its installation directory.
 	Get-Service -Name $serviceName;
 	```
 
-	Check the startup log. If startup fails, also inspect the Windows Application
-	Event Log for the service name.
+	Проверьте лог запуска. Если служба не запускается, также проверьте журнал
+	«Приложение» Windows по имени службы.
 
-	Test `/health` using the configured HTTP address and port, then test a known
-	COM operation. `/health` confirms HTTP availability; it does not execute a
-	COM operation or verify the 1C connection. Resume callers after verification.
+	Вызовите `/health` по адресу и порту из конфигурации, затем выполните
+	проверенную COM-команду. `/health` подтверждает доступность HTTP, но не
+	выполняет COM-команду и не проверяет подключение к 1С. После успешной проверки
+	возобновите запросы клиентов.
 
-To roll back, pause callers, stop the service using the same procedure, and
-restore the backed-up `srv1c.exe` to its original path. Restore `config.json` only
-if configuration was changed during the upgrade. Start the service and repeat
-the checks before resuming callers.
+Для возврата к предыдущей версии приостановите запросы, остановите службу по
+той же процедуре и восстановите резервную копию `srv1c.exe` по прежнему пути.
+Восстановите `config.json`, только если изменяли конфигурацию при обновлении.
+Запустите службу и повторите проверки перед возобновлением запросов.
 
-If the executable must move to a different path, update the service's registered
-binary path with `sc.exe config`, preserving its arguments, account, and other
-settings. Keep `config.json` beside the executable at its new location. A normal
-upgrade at the same path requires no service registration changes.
+Если исполняемый файл требуется переместить, измените зарегистрированный путь
+службы через `sc.exe config`, сохранив аргументы, учётную запись и остальные
+настройки. Разместите `config.json` рядом с исполняемым файлом по новому пути.
+При обычном обновлении с сохранением пути менять регистрацию службы не нужно.
 
-The same stop, replace, and start procedure applies to the Redis executable,
-using `GoCOM1CRedisService` and the build from `redis`. Pause Redis producers and
-drain active work before stopping it. Its updated file logs use
-`%ProgramData%\GoCom1c\logs\redis1c-YYYY-MM-DD.log` in daily mode.
+Та же процедура остановки, замены и запуска подходит для приложения Redis:
+используйте имя `GoCOM1CRedisService` и сборку из каталога `redis`. Приостановите
+источники команд Redis и дождитесь завершения текущей работы перед остановкой.
+В ежедневном режиме его файлы логов имеют вид
+`%ProgramData%\GoCom1c\logs\redis1c-YYYY-MM-DD.log`; параметры ротации и хранения
+применяются аналогично. Каждый сервис очищает только свои файлы логов.
 
-Microsoft references:
+Документация Microsoft:
 
-- [Querying service configuration](https://learn.microsoft.com/en-us/windows/win32/services/configuring-a-service-using-sc)
+- [Просмотр конфигурации службы](https://learn.microsoft.com/en-us/windows/win32/services/configuring-a-service-using-sc)
 - [Stop-Service](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.management/stop-service)
-- [Waiting for a service status](https://learn.microsoft.com/en-us/dotnet/api/system.serviceprocess.servicecontroller.waitforstatus)
-- [Changing service configuration](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/sc-config)
+- [Ожидание состояния службы](https://learn.microsoft.com/en-us/dotnet/api/system.serviceprocess.servicecontroller.waitforstatus)
+- [Изменение конфигурации службы](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/sc-config)

@@ -1,6 +1,8 @@
 {
 	"logLevel": "debug",
 	"logToFile": false,
+	"logRotationPeriod": "daily",
+	"logRetentionDays": 30,
 	"shutdownTimeout": "10s",
 
 	"httpAddr": "127.0.0.1:6000",

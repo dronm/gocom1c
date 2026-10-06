@@ -1,23 +1,25 @@
-// Package logger
+// Package logger supplies the application's shared logging policy.
 package logger
 
 import (
+	"fmt"
+	"io"
 	"os"
+	"sync"
 
+	"github.com/dronm/gocom1c/internal/logging"
 	"github.com/sirupsen/logrus"
 )
 
-// Logger is the global logger instance
+// Logger is the global logger instance. Rotation keeps this instance stable.
 var Logger *logrus.Logger
 
-type LoggerLogLevel string
-
-const (
-	logLevelDebug LoggerLogLevel = "debug"
-	logLevelInfo  LoggerLogLevel = "info"
-	logLevelWarn  LoggerLogLevel = "warn"
-	logLevelError LoggerLogLevel = "error"
+var (
+	lifecycleMu sync.Mutex
+	output      io.Closer
 )
+
+type LoggerLogLevel string
 
 type LogWriter struct {
 	logger *logrus.Logger
@@ -27,50 +29,48 @@ func NewLogWriter() *LogWriter {
 	return &LogWriter{logger: Logger}
 }
 
-func (lw *LogWriter) Write(p []byte) (n int, err error) {
+func (lw *LogWriter) Write(p []byte) (int, error) {
 	lw.logger.Info(string(p))
 	return len(p), nil
 }
 
-func Initialize(logLevel LoggerLogLevel, toFile string) error {
-	Logger = logrus.New()
-
-	// Set log format (can be JSON or text)
-	Logger.SetFormatter(&logrus.TextFormatter{
-		FullTimestamp: true, // Show full timestamp
-	})
-
-	// Set log level (you can change to logrus.DebugLevel or others)
-	Logger.SetLevel(logrusLogLevel(logLevel))
-
-	// Optionally, set output to a file
-	if toFile != "" {
-		logFile, err := os.OpenFile(toFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
-		if err != nil {
-			return err
-		}
-		Logger.SetOutput(logFile)
+// Initialize accepts an optional period so existing two-argument callers keep
+// the daily default. Log retention defaults to 30 days.
+func Initialize(logLevel LoggerLogLevel, filename string, rotationPeriod ...string) error {
+	period := logging.DefaultRotationPeriod
+	if len(rotationPeriod) > 1 {
+		return fmt.Errorf("expected at most one log rotation period")
 	}
+	if len(rotationPeriod) == 1 {
+		period = rotationPeriod[0]
+	}
+	return InitializeWithRetention(logLevel, filename, period, logging.DefaultRetentionDays)
+}
 
+// InitializeWithRetention applies explicit rotation and retention settings.
+func InitializeWithRetention(logLevel LoggerLogLevel, filename, period string, days int) error {
+	logger, closer, err := logging.NewLogger(string(logLevel), filename, period, days)
+	if err != nil {
+		return err
+	}
+	lifecycleMu.Lock()
+	defer lifecycleMu.Unlock()
+	if output != nil {
+		if err := output.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "close previous log output: %v\n", err)
+		}
+	}
+	Logger = logger
+	output = closer
 	return nil
 }
 
-func logrusLogLevel(logLevel LoggerLogLevel) logrus.Level {
-	var lvl logrus.Level
-
-	switch logLevel {
-	case logLevelDebug:
-		lvl = logrus.DebugLevel
-	case logLevelInfo:
-		lvl = logrus.InfoLevel
-	case logLevelWarn:
-		lvl = logrus.WarnLevel
-	case logLevelError:
-		lvl = logrus.ErrorLevel
-	default:
-		lvl = logrus.InfoLevel
+// Close is idempotent and never closes stderr. Later messages use stderr.
+func Close() error {
+	lifecycleMu.Lock()
+	defer lifecycleMu.Unlock()
+	if output == nil {
+		return nil
 	}
-	return lvl
+	return output.Close()
 }
-
-

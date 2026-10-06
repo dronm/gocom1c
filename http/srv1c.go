@@ -1,13 +1,16 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/dronm/gocom1c/http/config"
 	"github.com/dronm/gocom1c/http/logger"
+	"github.com/dronm/gocom1c/internal/logging"
 )
 
 func main() {
@@ -46,51 +49,66 @@ func main() {
 }
 
 type ServiceApp struct {
-	cfg *config.Config
-	srv *Server
+	mu      sync.Mutex
+	cfg     *config.Config
+	srv     *Server
+	stopErr error
 }
 
 func (app *ServiceApp) Start() error {
-	// Lazy initialization
-	if app.cfg == nil {
-		exeDir, err := getExecutableDir()
-		if err != nil {
-			return fmt.Errorf("failed to get executable directory: %v", err)
-		}
-		configPath := filepath.Join(exeDir, "config.json")
+	app.mu.Lock()
+	defer app.mu.Unlock()
+	if app.srv != nil {
+		return fmt.Errorf("server is already running or its previous shutdown failed")
+	}
+	exeDir, err := getExecutableDir()
+	if err != nil {
+		return fmt.Errorf("failed to get executable directory: %v", err)
+	}
+	configPath := filepath.Join(exeDir, "config.json")
 
-		cfg := &config.Config{}
+	cfg := &config.Config{}
 
-		if err := cfg.ReadConf(configPath); err != nil {
-			return fmt.Errorf("failed to read config: %v", err)
-		}
-		app.cfg = cfg
-
-		// Initialize logger
-		logFileName, err := resolveLogFileName(cfg.LogToFile)
-		if err != nil {
-			return fmt.Errorf("resolveLogFileName():%w", err)
-		}
-		if err := logger.Initialize(logger.LoggerLogLevel(cfg.LogLevel), logFileName); err != nil {
-			return fmt.Errorf("failed to initialize logger: %v", err)
-		}
-
-		// Create server
-		srv, err := NewServer(cfg)
-		if err != nil {
-			return fmt.Errorf("failed to initialize server: %v", err)
-		}
-		app.srv = srv
+	if err := cfg.ReadConf(configPath); err != nil {
+		return fmt.Errorf("failed to read config: %v", err)
 	}
 
-	return app.srv.Start()
+	// Initialize logger
+	logFileName, err := resolveLogFileName(cfg.LogToFile)
+	if err != nil {
+		return fmt.Errorf("resolveLogFileName():%w", err)
+	}
+	if err := logger.InitializeWithRetention(logger.LoggerLogLevel(cfg.LogLevel), logFileName, cfg.LogRotationPeriod, cfg.LogRetentionDays); err != nil {
+		return fmt.Errorf("failed to initialize logger: %v", err)
+	}
+
+	// Create server
+	srv, err := NewServer(cfg)
+	if err != nil {
+		return errors.Join(fmt.Errorf("failed to initialize server: %w", err), logger.Close())
+	}
+	if err := srv.Start(); err != nil {
+		logger.Logger.Errorf("Server startup failed: %v", err)
+		return errors.Join(fmt.Errorf("failed to start server: %w", err), srv.Stop(), logger.Close())
+	}
+	app.cfg = cfg
+	app.srv = srv
+	return nil
 }
 
 func (app *ServiceApp) Stop() error {
+	app.mu.Lock()
+	defer app.mu.Unlock()
+	var err error
 	if app.srv != nil {
-		return app.srv.Stop()
+		err = app.srv.Stop()
+		app.stopErr = errors.Join(app.stopErr, err)
+		if app.stopErr == nil {
+			app.srv = nil
+			app.cfg = nil
+		}
 	}
-	return nil
+	return errors.Join(app.stopErr, logger.Close())
 }
 
 func getExecutableDir() (string, error) {
@@ -103,20 +121,5 @@ func getExecutableDir() (string, error) {
 
 // resolveLogFileName is a helper to resolve log filename.
 func resolveLogFileName(logToFile bool) (string, error) {
-	if !logToFile {
-		return "", nil
-	}
-
-	programData := os.Getenv("ProgramData")
-	if programData == "" {
-		return "", fmt.Errorf("ProgramData env variable is empty")
-	}
-
-	logDir := filepath.Join(programData, "GoCom1c", "logs")
-
-	if err := os.MkdirAll(logDir, 0755); err != nil {
-		return "", fmt.Errorf("failed to create log dir %q: %w", logDir, err)
-	}
-
-	return filepath.Join(logDir, config.DefLogFileName), nil
+	return logging.ResolveLogFileName(logToFile, config.DefLogFileName)
 }

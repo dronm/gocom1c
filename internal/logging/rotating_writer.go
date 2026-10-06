@@ -12,27 +12,29 @@ import (
 
 type fileOpener func(string) (io.WriteCloser, error)
 
-// RotatingWriter appends to one file per period. It creates a new period's file
-// only when a record is written, and never deletes existing log files.
+// RotatingWriter appends to one file per period and removes expired period
+// files when retention is enabled. The active and legacy files are preserved.
 type RotatingWriter struct {
-	mu          sync.Mutex
-	filename    string
-	period      Period
-	now         func() time.Time
-	openFile    fileOpener
-	diagnostics io.Writer
-	file        io.WriteCloser
-	activeName  string
-	start       time.Time
-	end         time.Time
-	closed      bool
+	mu            sync.Mutex
+	filename      string
+	period        Period
+	retentionDays int
+	nextCleanup   time.Time
+	now           func() time.Time
+	openFile      fileOpener
+	diagnostics   io.Writer
+	file          io.WriteCloser
+	activeName    string
+	start         time.Time
+	end           time.Time
+	closed        bool
 }
 
 var _ io.WriteCloser = (*RotatingWriter)(nil)
 
 // NewRotatingWriter opens the current period's file immediately. The parent
 // directory must already exist. Existing files are always opened in append mode.
-func NewRotatingWriter(filename string, rotationPeriod string) (*RotatingWriter, error) {
+func NewRotatingWriter(filename string, rotationPeriod string, retentionDays ...int) (*RotatingWriter, error) {
 	period, err := ParsePeriod(rotationPeriod)
 	if err != nil {
 		return nil, err
@@ -40,24 +42,29 @@ func NewRotatingWriter(filename string, rotationPeriod string) (*RotatingWriter,
 
 	return newRotatingWriter(filename, period, time.Now, func(name string) (io.WriteCloser, error) {
 		return os.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
-	}, os.Stderr)
+	}, os.Stderr, retentionDays...)
 }
 
-func newRotatingWriter(filename string, period Period, now func() time.Time, opener fileOpener, diagnostics io.Writer) (*RotatingWriter, error) {
+func newRotatingWriter(filename string, period Period, now func() time.Time, opener fileOpener, diagnostics io.Writer, retentionDays ...int) (*RotatingWriter, error) {
 	if strings.TrimSpace(filename) == "" {
 		return nil, fmt.Errorf("log filename must not be empty")
+	}
+	days, err := retentionSetting(retentionDays)
+	if err != nil {
+		return nil, err
 	}
 
 	currentTime := now()
 	start, end := period.window(currentTime)
 	writer := &RotatingWriter{
-		filename:    filename,
-		period:      period,
-		now:         now,
-		openFile:    opener,
-		diagnostics: diagnostics,
-		start:       start,
-		end:         end,
+		filename:      filename,
+		period:        period,
+		retentionDays: days,
+		now:           now,
+		openFile:      opener,
+		diagnostics:   diagnostics,
+		start:         start,
+		end:           end,
 	}
 	name := writer.periodFilename(start)
 	if period.daily {
@@ -71,6 +78,7 @@ func newRotatingWriter(filename string, period Period, now func() time.Time, ope
 	}
 	writer.file = file
 	writer.activeName = name
+	writer.cleanup(currentTime)
 	return writer, nil
 }
 
@@ -120,6 +128,7 @@ func (w *RotatingWriter) Write(p []byte) (int, error) {
 		}
 	}
 
+	w.cleanup(now)
 	n, err := w.file.Write(p)
 	if n < len(p) && err == nil {
 		err = io.ErrShortWrite

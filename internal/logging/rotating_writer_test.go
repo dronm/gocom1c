@@ -71,7 +71,7 @@ func newRotationTestWriter(t *testing.T, filename, setting string, now *time.Tim
 	if err != nil {
 		t.Fatal(err)
 	}
-	writer, err := newRotatingWriter(filename, period, func() time.Time { return *now }, opener.open, diagnostics)
+	writer, err := newRotatingWriter(filename, period, func() time.Time { return *now }, opener.open, diagnostics, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

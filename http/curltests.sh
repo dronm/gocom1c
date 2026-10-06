@@ -1,20 +1,9 @@
-#!/usr/bin/env bash
-set -euo pipefail
+# Simple health check
+curl http://127.0.0.1:60000/health
 
-# Запускайте в Bash. Укажите в BASE_URL адрес, соответствующий httpAddr в конфигурации сервиса.
-# Пример: BASE_URL=http://127.0.0.1:5000 HTTP_USERNAME=username bash curltests.sh
-# Настройка аутентификации, примеры выполнения команд и скачивания файлов описаны в README.md.
-base_url="${BASE_URL:-http://127.0.0.1:5000}"
-http_username="${HTTP_USERNAME:-username}"
-base_url="${base_url%/}"
+curl http://127.0.0.1:60000/status
 
-# /health доступен без аутентификации, даже если auth.requireAuth имеет значение true.
-curl --fail --show-error "${base_url}/health"
-
-# /status требует базовую HTTP-аутентификацию, если auth.requireAuth имеет значение true.
-# curl запрашивает пароль, если переменная HTTP_PASSWORD не задана.
-if [[ -n "${HTTP_PASSWORD:-}" ]]; then
-	curl --fail --show-error --basic --user "${http_username}:${HTTP_PASSWORD}" "${base_url}/status"
-else
-	curl --fail --show-error --basic --user "${http_username}" "${base_url}/status"
-fi
+# Test command with string parameter
+curl -X POST http://127.0.0.1:60000/execute ^
+  -H "Content-Type: application/json" ^
+  -d "{\"command\": \"TestMethod\",\"params\": {\"param1\":\"Hello from curl\"}}"

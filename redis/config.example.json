@@ -2,6 +2,7 @@
 	"logLevel": "info",
 	"logToFile": true,
 	"logRotationPeriod": "daily",
+	"logRetentionDays": 30,
 	"shutdownTimeout": "10s",
 	"redis": {
 		"host": "localhost",

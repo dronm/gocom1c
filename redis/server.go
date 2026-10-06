@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -22,6 +23,9 @@ type RedisServer struct {
 	mu        sync.RWMutex
 	cfg       *config.Config
 	isRunning bool
+	stopping  bool
+	stopDone  chan struct{}
+	drainDone <-chan struct{}
 }
 
 // NewRedisServer creates a new Redis server
@@ -38,13 +42,35 @@ func NewRedisServer(cfg *config.Config) (*RedisServer, error) {
 }
 
 // Start starts the Redis server
-func (s *RedisServer) Start() error {
+func (s *RedisServer) Start() (startErr error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if s.isRunning {
+	if s.isRunning || s.stopping {
 		return fmt.Errorf("server is already running")
 	}
+	if s.drainDone != nil {
+		select {
+		case <-s.drainDone:
+		default:
+			return fmt.Errorf("commands from the previous server run are still finishing")
+		}
+	}
+	// A server may be started again after a completed shutdown.
+	s.ctx, s.cancel = context.WithCancel(context.Background())
+	defer func() {
+		if startErr != nil {
+			s.cancel()
+			if s.pool != nil {
+				startErr = errors.Join(startErr, s.pool.Close())
+				s.pool = nil
+			}
+			if s.redis != nil {
+				startErr = errors.Join(startErr, s.redis.Close())
+				s.redis = nil
+			}
+		}
+	}()
 
 	// Initialize Redis client
 	s.redis = redis.NewClient(&redis.Options{
@@ -84,24 +110,61 @@ func (s *RedisServer) Start() error {
 // Stop gracefully stops the server
 func (s *RedisServer) Stop() error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	if !s.isRunning {
+		done, stopping := s.stopDone, s.stopping
+		s.mu.Unlock()
+		if stopping {
+			<-done
+		}
 		return nil
 	}
+	s.isRunning = false
+	s.stopping = true
+	s.stopDone = make(chan struct{})
+	done := s.stopDone
 
 	logger.Logger.Info("Shutting down Redis server...")
 
 	// Cancel context to stop goroutines
 	s.cancel()
+	workersDone := make(chan struct{})
+	s.drainDone = workersDone
+	go func() {
+		s.wg.Wait()
+		close(workersDone)
+	}()
+	s.mu.Unlock()
 
-	// Wait for goroutines to finish
-	s.wg.Wait()
+	// Drain the listener and command handlers before closing their resources,
+	// with a deadline for stuck COM calls. Handlers may need s.mu themselves.
+	timeout := s.cfg.ShutdownTimeout.Duration
+	if timeout <= 0 {
+		timeout = 10 * time.Second
+	}
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	var stopErr error
+	drained := false
+	select {
+	case <-workersDone:
+		drained = true
+	case <-timer.C:
+		stopErr = fmt.Errorf("timed out waiting for Redis command handlers after %s", timeout)
+		logger.Logger.Warn(stopErr)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	defer close(done)
 
 	// Close Redis connection
 	if s.redis != nil {
 		if err := s.redis.Close(); err != nil {
 			logger.Logger.Errorf("Redis connection close error: %v", err)
+			stopErr = errors.Join(stopErr, err)
+		}
+		if drained {
+			s.redis = nil
 		}
 	}
 
@@ -109,13 +172,21 @@ func (s *RedisServer) Stop() error {
 	if s.pool != nil {
 		if err := s.pool.Close(); err != nil {
 			logger.Logger.Errorf("COM pool close error: %v", err)
+			stopErr = errors.Join(stopErr, err)
+		}
+		if drained {
+			s.pool = nil
 		}
 	}
 
-	s.isRunning = false
-	logger.Logger.Info("Redis server stopped successfully")
+	s.stopping = false
+	if stopErr == nil {
+		logger.Logger.Info("Redis server stopped successfully")
+	} else {
+		logger.Logger.Warn("Redis server stopped with shutdown errors")
+	}
 
-	return nil
+	return stopErr
 }
 
 // processCommands listens for commands from Redis queue
@@ -157,7 +228,11 @@ func (s *RedisServer) processCommands() {
 		// Process command
 		commandJSON := result[1]
 		logger.Logger.Debugf("Received command: %s", commandJSON)
-		go s.handleCommand(commandJSON)
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			s.handleCommand(commandJSON)
+		}()
 	}
 }
 

@@ -11,13 +11,17 @@ import (
 // NewLogger shares the output and formatting policy used by both executables.
 // Closing the returned handle releases the log file and sends later messages to
 // stderr, which keeps timed-out COM workers from writing to a closed file.
-func NewLogger(level, filename, rotationPeriod string) (*logrus.Logger, io.Closer, error) {
+func NewLogger(level, filename, rotationPeriod string, retentionDays ...int) (*logrus.Logger, io.Closer, error) {
+	days, err := retentionSetting(retentionDays)
+	if err != nil {
+		return nil, nil, err
+	}
 	if _, err := ParsePeriod(rotationPeriod); err != nil {
 		return nil, nil, err
 	}
 	output := &loggerOutput{writer: os.Stderr}
 	if filename != "" {
-		writer, err := NewRotatingWriter(filename, rotationPeriod)
+		writer, err := NewRotatingWriter(filename, rotationPeriod, days)
 		if err != nil {
 			return nil, nil, err
 		}
